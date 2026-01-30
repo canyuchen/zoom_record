@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Zoom 会议自动录制脚本
-当检测到 Zoom 会议开始时，自动按下豆包的录制快捷键 Command+Shift+Z
+会议自动录制脚本
+当检测到 Zoom 或 Google Meet 会议开始时，自动按下豆包的录制快捷键 Command+Shift+Z
 """
 
 import subprocess
@@ -14,13 +14,11 @@ sys.stderr.reconfigure(line_buffering=True)
 
 # 配置
 CHECK_INTERVAL = 2  # 检查间隔（秒）
-ZOOM_PROCESS_NAME = "zoom.us"  # Zoom 进程名
 
 
-def is_in_meeting():
+def is_zoom_meeting():
     """检查是否在 Zoom 会议中"""
     try:
-        # 使用 AppleScript 检查 Zoom 窗口标题
         script = '''
         tell application "System Events"
             if exists (process "zoom.us") then
@@ -39,26 +37,60 @@ def is_in_meeting():
             text=True
         )
         window_names = result.stdout.strip().lower()
-
-        # 只要窗口名包含 "meeting" 就认为在会议中
         if "meeting" in window_names:
             return True
         return False
-    except Exception as e:
-        print(f"检查 Zoom 状态时出错: {e}")
-        return False
-
-
-def is_zoom_running():
-    """检查 Zoom 是否正在运行"""
-    try:
-        result = subprocess.run(
-            ["pgrep", "-x", ZOOM_PROCESS_NAME],
-            capture_output=True
-        )
-        return result.returncode == 0
     except Exception:
         return False
+
+
+def is_google_meet():
+    """检查是否在 Google Meet 会议中（通过检查浏览器标签页）"""
+    try:
+        # 检查 Chrome 中是否有 Google Meet 标签页
+        script = '''
+        tell application "System Events"
+            if exists (process "Google Chrome") then
+                tell application "Google Chrome"
+                    set meetFound to false
+                    repeat with w in windows
+                        repeat with t in tabs of w
+                            if URL of t contains "meet.google.com" then
+                                set meetFound to true
+                                exit repeat
+                            end if
+                        end repeat
+                        if meetFound then exit repeat
+                    end repeat
+                    return meetFound
+                end tell
+            else
+                return false
+            end if
+        end tell
+        '''
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True,
+            text=True
+        )
+        return result.stdout.strip().lower() == "true"
+    except Exception:
+        return False
+
+
+def is_in_meeting():
+    """检查是否在任何会议中"""
+    return is_zoom_meeting() or is_google_meet()
+
+
+def get_meeting_type():
+    """获取当前会议类型"""
+    if is_zoom_meeting():
+        return "Zoom"
+    if is_google_meet():
+        return "Google Meet"
+    return None
 
 
 def trigger_doubao_record():
@@ -69,7 +101,6 @@ def trigger_doubao_record():
             key code 6 using {command down, shift down}
         end tell
         '''
-        # key code 6 是 Z 键
         subprocess.run(["osascript", "-e", script], check=True)
         print("✓ 已触发豆包录制快捷键 (Command+Shift+Z)")
         return True
@@ -80,42 +111,36 @@ def trigger_doubao_record():
 
 def main():
     print("=" * 50)
-    print("Zoom 会议自动录制脚本")
-    print("检测到 Zoom 会议时将自动触发豆包录制")
+    print("会议自动录制脚本")
+    print("支持: Zoom, Google Meet")
+    print("检测到会议时将自动触发豆包录制")
     print("快捷键: Command+Shift+Z")
     print("=" * 50)
     print(f"检查间隔: {CHECK_INTERVAL} 秒")
     print("按 Ctrl+C 停止脚本")
     print("-" * 50)
 
-    is_recording = False  # 是否正在录制
+    is_recording = False
+    current_meeting_type = None
 
     try:
         while True:
-            zoom_running = is_zoom_running()
+            meeting_type = get_meeting_type()
 
-            if not zoom_running:
-                if is_recording:
-                    print(f"\n[{time.strftime('%H:%M:%S')}] Zoom 已关闭")
-                    is_recording = False
-                time.sleep(CHECK_INTERVAL)
-                continue
-
-            in_meeting = is_in_meeting()
-
-            if in_meeting and not is_recording:
+            if meeting_type and not is_recording:
                 # 会议开始，开始录制
-                print(f"\n[{time.strftime('%H:%M:%S')}] 检测到 Zoom 会议开始!")
-                # 等待一小段时间让会议窗口完全加载
+                print(f"\n[{time.strftime('%H:%M:%S')}] 检测到 {meeting_type} 会议开始!")
                 time.sleep(2)
-                trigger_doubao_record()  # 开始录制
+                trigger_doubao_record()
                 print("    → 开始录制")
                 is_recording = True
+                current_meeting_type = meeting_type
 
-            elif not in_meeting and is_recording:
+            elif not meeting_type and is_recording:
                 # 会议结束
-                print(f"\n[{time.strftime('%H:%M:%S')}] Zoom 会议已结束")
+                print(f"\n[{time.strftime('%H:%M:%S')}] {current_meeting_type} 会议已结束")
                 is_recording = False
+                current_meeting_type = None
 
             time.sleep(CHECK_INTERVAL)
 
