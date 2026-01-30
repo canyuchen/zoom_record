@@ -17,8 +17,8 @@ CHECK_INTERVAL = 2  # 检查间隔（秒）
 ZOOM_PROCESS_NAME = "zoom.us"  # Zoom 进程名
 
 
-def get_zoom_meeting_id():
-    """获取当前 Zoom 会议的窗口标题（用于区分不同会议）"""
+def is_in_meeting():
+    """检查是否在 Zoom 会议中"""
     try:
         # 使用 AppleScript 检查 Zoom 窗口标题
         script = '''
@@ -38,23 +38,15 @@ def get_zoom_meeting_id():
             capture_output=True,
             text=True
         )
-        window_names = result.stdout.strip()
-        window_names_lower = window_names.lower()
+        window_names = result.stdout.strip().lower()
 
-        # 检查是否是会议窗口
-        meeting_indicators = ["zoom meeting", "meeting", "会议"]
-
-        if window_names:
-            for indicator in meeting_indicators:
-                if indicator in window_names_lower:
-                    return window_names  # 返回窗口标题作为会议标识
-            # 如果窗口名不是简单的 "Zoom"，可能是会议
-            if window_names_lower not in ["zoom", "zoom workplace", ""]:
-                return window_names
-        return None  # 没有会议
+        # 只要窗口名包含 "meeting" 就认为在会议中
+        if "meeting" in window_names:
+            return True
+        return False
     except Exception as e:
         print(f"检查 Zoom 状态时出错: {e}")
-        return None
+        return False
 
 
 def is_zoom_running():
@@ -96,34 +88,34 @@ def main():
     print("按 Ctrl+C 停止脚本")
     print("-" * 50)
 
-    current_meeting_id = None  # 记录当前会议的标识
+    is_recording = False  # 是否正在录制
 
     try:
         while True:
             zoom_running = is_zoom_running()
 
             if not zoom_running:
-                if current_meeting_id:
+                if is_recording:
                     print(f"\n[{time.strftime('%H:%M:%S')}] Zoom 已关闭")
-                    current_meeting_id = None
+                    is_recording = False
                 time.sleep(CHECK_INTERVAL)
                 continue
 
-            meeting_id = get_zoom_meeting_id()
+            in_meeting = is_in_meeting()
 
-            if meeting_id and meeting_id != current_meeting_id:
-                # 新会议开始（包括第一次会议和切换到新会议）
-                print(f"\n[{time.strftime('%H:%M:%S')}] 检测到新的 Zoom 会议!")
-                print(f"    会议: {meeting_id}")
+            if in_meeting and not is_recording:
+                # 会议开始，开始录制
+                print(f"\n[{time.strftime('%H:%M:%S')}] 检测到 Zoom 会议开始!")
                 # 等待一小段时间让会议窗口完全加载
                 time.sleep(2)
-                trigger_doubao_record()
-                current_meeting_id = meeting_id
+                trigger_doubao_record()  # 开始录制
+                print("    → 开始录制")
+                is_recording = True
 
-            elif not meeting_id and current_meeting_id:
+            elif not in_meeting and is_recording:
                 # 会议结束
                 print(f"\n[{time.strftime('%H:%M:%S')}] Zoom 会议已结束")
-                current_meeting_id = None
+                is_recording = False
 
             time.sleep(CHECK_INTERVAL)
 
