@@ -45,9 +45,11 @@ def is_zoom_meeting():
 
 
 def is_google_meet():
-    """检查是否在 Google Meet 会议中（通过检查浏览器标签页）"""
+    """检查是否在 Google Meet 会议中（真正加入会议，不是首页或等待页面）"""
     try:
-        # 检查 Chrome 中是否有 Google Meet 标签页
+        # 检查 Chrome 中是否有正在进行的 Google Meet 会议
+        # URL 格式: meet.google.com/xxx-xxxx-xxx (会议中)
+        # 排除: meet.google.com/landing (首页), meet.google.com/new (创建页面)
         script = '''
         tell application "System Events"
             if exists (process "Google Chrome") then
@@ -55,9 +57,18 @@ def is_google_meet():
                     set meetFound to false
                     repeat with w in windows
                         repeat with t in tabs of w
-                            if URL of t contains "meet.google.com" then
-                                set meetFound to true
-                                exit repeat
+                            set tabURL to URL of t
+                            set tabTitle to title of t
+                            -- 检查是否是会议 URL (包含会议代码 xxx-xxxx-xxx)
+                            -- 排除首页、创建页面等
+                            if tabURL contains "meet.google.com/" then
+                                if tabURL does not contain "/landing" and tabURL does not contain "/new" and tabURL does not contain "/lookup" then
+                                    -- 检查标题是否表明在会议中 (不是 "Google Meet" 首页标题)
+                                    if tabTitle does not start with "Google Meet" or tabTitle contains "Meet -" then
+                                        set meetFound to true
+                                        exit repeat
+                                    end if
+                                end if
                             end if
                         end repeat
                         if meetFound then exit repeat
