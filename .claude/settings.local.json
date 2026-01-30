@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(chmod:*)",
+      "Bash(launchctl load:*)",
+      "Bash(launchctl list:*)",
+      "Bash(launchctl unload:*)",
+      "Bash(cat:*)",
+      "Bash(~/Library/Logs/zoom-auto-record.error.log)",
+      "Bash(timeout 5 /Users/ccy/miniconda3/bin/python3:*)",
+      "Bash(/Users/ccy/miniconda3/bin/python3:*)",
+      "Bash(~/Library/Logs/zoom-auto-record.log)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
